@@ -1,2 +1,3 @@
-# k8s_pod
-Pod manifest for K8s
+# Pods
+
+Simple repo with everything related to K8s manifests
