@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployment-with-updates-and-rollbacks
+  annotations:
+    kubernetes.io/change-cause: "Upgraded nginx image version 1.8.1"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+      type: frontend
+  template:
+    metadata:
+      labels:
+        app: nginx
+        type: frontend
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.8.1
