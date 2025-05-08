@@ -21,6 +21,7 @@ The Kubeseal CLI is part of the [K8s-tooling](https://github.com/heathen1878/k8s
 
 ```shell
 # Create the secrets using kubectl with dry-run=client; i.e. print the object for kubeseal to encrypt.
+# Database Admin
 kubectl create secret generic postgres-secret \
 --from-literal=POSTGRES_USER=admin \
 --from-literal=POSTGRES_PASSWORD=letmein123 \
@@ -38,6 +39,26 @@ kubeseal --controller-namespace=kube-system --format=yaml < tmp/secret.yml > man
 
 ```shell
 kubectl apply -f manifests/votingapp/database/postgres-secrets.yml
+```
+
+Repeat for the application user
+
+```shell
+# Application user
+kubectl create secret generic app-user-secret \
+--from-literal=APP_USER=postgres \
+--from-literal=APP_PASSWORD=postgres \
+--namespace=votingapp \
+--dry-run=client \
+--output yaml > tmp/app-user-secret.yml
+```
+
+```shell
+kubeseal --controller-namespace=kube-system --format=yaml < tmp/app-user-secret.yml > manifests/votingapp/database/app-user-secret.yml
+```
+
+```shell
+kubectl apply -f manifests/votingapp/database/app-user-secret.yml
 ```
 
 Now you can deploy the PostgreSQL database using the secrets sealed above.

@@ -23,6 +23,7 @@ metadata:
   namespace: votingapp
 data:
   init.sql: |
+    -- Create the votes table if it does not exist
     CREATE TABLE IF NOT EXISTS votes (
       id VARCHAR(255) NOT NULL UNIQUE,
       vote VARCHAR(255) NOT NULL
@@ -114,3 +115,57 @@ spec:
           configMap:
             name: database-init-script
 ---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: user-init-script
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of batch job to create the user with access to the votes table"
+  namespace: votingapp
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-user
+          image: postgres:17
+          command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for PostgreSQL to become ready..."
+            until pg_isready -h db -U $ADMIN; do sleep 2; done
+
+            echo "Creating user and granting access..."
+            psql -h db -U $ADMIN -d postgres <<EOF
+              DO \$\$
+              BEGIN
+                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$USER') THEN
+                  CREATE ROLE $USER WITH LOGIN PASSWORD '$PASSWORD'
+              END
+              \$\$;
+
+              GRANT USAGE ON SCHEMA public to $USER;
+              GRANT SELECT, INSERT, UPDATE ON TABLE votes to $USER;
+            EOF
+          env:
+            - name: ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-user-secret
+                  key: APP_USER
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-user-secret
+                  key: APP_PASSWORD
