@@ -12,7 +12,6 @@ Click the Gear Icon and select...settings, then scroll down to schemas and selec
 
 The extension will now help with syntazx for all yaml files within manifest folders. 
 
-
 ## Pods
 
 Deploys a single pod to a K8s node.
@@ -123,4 +122,63 @@ kubectl describe deployment app-deployment-with-updates-and-rollbacks
 
 ![](assets/part2.png)
 
+
+## Networking
+
+The K8s nodes all have node ip addresses, very much in the way a VM or physical would e.g 192.168.0.1 and the API would be exposed on https://192.168.0.1:6443.
+
+The pods on the other had reside on a pod subnet and use Container Network Interface (CNI) plugins such as Flannel, Calico...or maybe something like Azure CNI for AKS.
+
+The default subnet for Flannel is 10.244.0.0/16 - I used this for my local environment. Each node will be assigned a /24 within that range e.g. master node 10.244.0.0/24, first worker node 10.244.1.0/24....
+
+CNI enables your pods to communicate across cluster nodes seamlessly.
+
+## Services
+
+### NodePort
+
+Exposes a port on the cluster which can be used to route traffic to an ingress controller or directly to a pod or number of pods.
+
+[Service]()
+
+```shell
+
+```
+
+### ClusterIP
+
+Exposes a name and port internally so pods can communicate with other pod deployments.
+
+[Cluster IP]()
+
+```shell
+
+```
+
+### Load Balancer
+
+Only available with Cloud implementations of K8s.
+
+## Micro services architecture
+
+### Voting App
+
+The deployment steps can be found [here](manifests/votingapp/readme.md)
+
+#### Backend services
+
+Database running PostgreSQL in HA using statefulset. The credentials for the database are encrypted using kubeseal; if this was a cloud instance of k8s we could probably use Key Vault or similar. 
+
+A Redis in-memory database is used to capture the initial vote; the worker node then processes this and persists it in the database. The worker node is a .NET app.
+
+#### Frontend Services
+
+
+
+#### Voting app
+Python app - user enter their preference.
+
+#### Result app
+
+Node Js app showing database information.
 

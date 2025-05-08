@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of db service"
+  namespace: votingapp
+  labels:
+    app: voting-app-db
+spec:
+  selector:
+    app: voting-app-db
+  ports:
+    - name: postgres
+      port: 5432
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-init-script
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of database table"
+  namespace: votingapp
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS votes (
+      id VARCHAR(255) NOT NULL UNIQUE,
+      vote VARCHAR(255) NOT NULL
+    );
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of DB stateful set"
+  namespace: votingapp
+  labels:
+    app: voting-app-db
+spec:
+  serviceName: db
+  replicas: 2
+  selector:
+    matchLabels:
+      app: voting-app-db
+  template:
+    metadata:
+      labels:
+        app: voting-app-db
+    spec:        
+      containers:
+        - name: db
+          image: postgres:17
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: REPLICATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: REPLICATOR_PASSWORD
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: pgdata
+          emptyDir: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: database-init-script
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of batch job to create the table on first run."
+  namespace: votingapp
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init-script
+          image: postgres:17
+          command: 
+           - sh
+           - -c
+           - | 
+              psql -h db -U $POSTGRES_USER -d postgres -f /init/init.sql
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: init-script
+              mountPath: /init
+      volumes:
+        - name: init-script
+          configMap:
+            name: database-init-script
+---
