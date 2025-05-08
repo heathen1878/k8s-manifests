@@ -40,7 +40,7 @@ metadata:
     app: voting-app-db
 spec:
   serviceName: db
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: voting-app-db
@@ -136,12 +136,17 @@ spec:
             echo "Waiting for PostgreSQL to become ready..."
             until pg_isready -h db -U $ADMIN; do sleep 2; done
 
+            echo "Waiting for votes table..."
+            until psql -h db -U $ADMIN -d postgres -c 'SELECT 1 FROM votes LIMIT 1;' 2>/dev/null; do
+              sleep 2
+            done
+
             echo "Creating user and granting access..."
             psql -h db -U $ADMIN -d postgres <<EOF
               DO \$\$
               BEGIN
-                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$USER') THEN
-                  CREATE ROLE $USER WITH LOGIN PASSWORD '$PASSWORD'
+                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = postgres) THEN
+                  CREATE ROLE postgres WITH LOGIN PASSWORD 'postgres'
               END
               \$\$;
 
