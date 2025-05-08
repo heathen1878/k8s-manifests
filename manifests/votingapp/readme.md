@@ -53,3 +53,14 @@ The Redis instance can be deployed using the command below; this will deploy a s
 ```shell
 kubectl apply -f manifests/votingapp/redis/deployment.yml
 ```
+
+## .NET Worker
+
+The .NET worker processes key / values found in Redis and persists them into the database. It uses the services of the Database and Redis to communicate with the backend pods.
+
+To deploy the worker run.
+
+```shell
+kubectl apply -f manifests/votingapp/worker/deployment.yml
+```
+
