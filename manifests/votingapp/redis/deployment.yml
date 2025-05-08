@@ -19,7 +19,7 @@ kind: StatefulSet
 metadata:
   name: redis
   annotations:
-    kubernetes.io/change-cause: "Initial creation of redis stateful set"
+    kubernetes.io/change-cause: "Changed replicas to 1"
   namespace: votingapp
   labels:
     app: voting-app-redis
