@@ -18,4 +18,4 @@ spec:
     spec:
       containers:
         - name: worker
-          image: kodekloud/examplevotingapp_worker:v1
+          image: dockersamples/examplevotingapp_worker
