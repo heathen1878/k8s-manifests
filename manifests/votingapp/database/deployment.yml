@@ -1,0 +1,176 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of db service"
+  namespace: votingapp
+  labels:
+    app: voting-app-db
+spec:
+  selector:
+    app: voting-app-db
+  ports:
+    - name: postgres
+      port: 5432
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-init-script
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of database table"
+  namespace: votingapp
+data:
+  init.sql: |
+    -- Create the votes table if it does not exist
+    CREATE TABLE IF NOT EXISTS votes (
+      id VARCHAR(255) NOT NULL UNIQUE,
+      vote VARCHAR(255) NOT NULL
+    );
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of DB stateful set"
+  namespace: votingapp
+  labels:
+    app: voting-app-db
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voting-app-db
+  template:
+    metadata:
+      labels:
+        app: voting-app-db
+    spec:        
+      containers:
+        - name: db
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: REPLICATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: REPLICATOR_PASSWORD
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: pgdata
+          emptyDir: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: database-init-script
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of batch job to create the table on first run."
+  namespace: votingapp
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init-script
+          image: postgres:17
+          command: 
+           - sh
+           - -c
+           - | 
+              psql -h db -U $POSTGRES_USER -d postgres -f /init/init.sql
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: init-script
+              mountPath: /init
+      volumes:
+        - name: init-script
+          configMap:
+            name: database-init-script
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: user-init-script
+  annotations:
+    kubernetes.io/change-cause: "Initial creation of batch job to create the user with access to the votes table"
+  namespace: votingapp
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-user
+          image: postgres:17
+          command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for PostgreSQL to become ready..."
+            until pg_isready -h db -U $ADMIN; do sleep 2; done
+
+            echo "Waiting for votes table..."
+            until psql -h db -U $ADMIN -d postgres -c 'SELECT 1 FROM votes LIMIT 1;' 2>/dev/null; do
+              sleep 2
+            done
+
+            echo "Creating user and granting access..."
+            psql -h db -U $ADMIN -d postgres <<EOF
+              DO \$\$
+              BEGIN
+                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = postgres) THEN
+                  CREATE ROLE postgres WITH LOGIN PASSWORD 'postgres'
+              END
+              \$\$;
+
+              GRANT USAGE ON SCHEMA public to $USER;
+              GRANT SELECT, INSERT, UPDATE ON TABLE votes to $USER;
+            EOF
+          env:
+            - name: ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-user-secret
+                  key: APP_USER
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-user-secret
+                  key: APP_PASSWORD
